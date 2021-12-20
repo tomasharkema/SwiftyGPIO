@@ -49,8 +49,8 @@ extension SwiftyGPIO {
 
 // MARK: 1-Wire
 public protocol OneWireInterface {
-    func getSlaves() -> [String]
-    func readData(_ slaveId: String) -> [String]
+    func getSlaves() throws -> [String]
+    func readData(_ slaveId: String) throws -> [String]
 }
 
 /// Hardware 1-Wire via SysFS
@@ -62,25 +62,24 @@ public final class SysFSOneWire: OneWireInterface {
         self.masterId = masterId
     }
 
-    public func getSlaves() -> [String] {
+    public func getSlaves() throws -> [String] {
         let listpath = ONEWIREBASEPATH + "w1_bus_master" + String(masterId) + "/w1_master_slaves"
-        return readFile(listpath)
+        return try readFile(listpath)
     }
 
-    public func readData(_ slaveId: String) -> [String] {
+    public func readData(_ slaveId: String) throws -> [String] {
         let devicepath = ONEWIREBASEPATH + slaveId + "/w1_slave"
-        return readFile(devicepath)
+        return try readFile(devicepath)
     }
 
-    private func readFile(_ pathname: String) -> [String] {
+    private func readFile(_ pathname: String) throws -> [String] {
         let fd = open(pathname, O_RDONLY | O_SYNC)
         guard fd > 0, let file = fdopen(fd, "r") else {
-            perror("Couldn't open 1-Wire device: "+pathname)
-            abort()
+          throw GPIOError.bus("Couldn't open 1-Wire device: "+pathname)
         }
 
         var lines = [String]()
-        while let s = readLine(maxLength: 128, file: file) {
+        while let s = try readLine(maxLength: 128, file: file) {
             lines.append(s)
         }
 
@@ -88,14 +87,13 @@ public final class SysFSOneWire: OneWireInterface {
         return lines      
     }
 
-    func readLine(maxLength: Int = 128, file: UnsafeMutablePointer<FILE>!) -> String? {
+    func readLine(maxLength: Int = 128, file: UnsafeMutablePointer<FILE>!) throws -> String? {
         var buffer = [CChar](repeating: 0, count: maxLength)
         guard fgets(&buffer, Int32(maxLength), file) != nil else {
             if feof(file) != 0 {
                 return nil
             } else {
-                perror("Error while reading from 1-Wire interface")
-                abort()
+              throw GPIOError.bus("Error while reading from 1-Wire interface")
             }
         }
         return String(cString: buffer)

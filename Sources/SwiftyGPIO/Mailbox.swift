@@ -80,7 +80,7 @@ public struct MailBox {
     }
 
     /// Initializes a new mailbox with size and an handle (-1 per-session handle)
-    public init?(handle: Int = -1, size: Int, isRaspi2: Bool = true) {
+    public init?(handle: Int = -1, size: Int, isRaspi2: Bool = true) throws {
         let MEM_FLAG_L1_NONALLOCATING = isRaspi2 ? 0x4 : 0xC
 
         mailboxFd = Int32(handle)
@@ -97,7 +97,7 @@ public struct MailBox {
             memFree()
             fatalError("Couldn't lock mailbox")
         }
-        baseVirtualAddress = mapmem(UInt(baseBusAddress) & ~0xC0000000, size: size)
+        baseVirtualAddress = try mapmem(UInt(baseBusAddress) & ~0xC0000000, size: size)
     }
 
     public mutating func cleanup() {
@@ -112,7 +112,7 @@ public struct MailBox {
     /// MARK: Memory mapping methods
 
     /// Map the requested address with page alignement
-    private func mapmem(_ address: UInt, size: Int) -> UnsafeMutableRawPointer {
+    private func mapmem(_ address: UInt, size: Int) throws -> UnsafeMutableRawPointer {
         var mem_fd: Int32 = 0
         let offset = Int(address) % PAGE_SIZE
         let ad = Int(address) - offset
@@ -137,8 +137,7 @@ public struct MailBox {
 
         let basePointer = base_map.assumingMemoryBound(to: UInt.self)
         if basePointer.pointee == UInt(bitPattern: -1) {    //MAP_FAILED not available, but its value is (void*)-1
-            print("mapmem error: " + "\(basePointer)")
-            abort()
+          throw GPIOError.bus("mapmem error: " + "\(basePointer)")
         }
 
         return UnsafeMutableRawPointer(basePointer) + offset

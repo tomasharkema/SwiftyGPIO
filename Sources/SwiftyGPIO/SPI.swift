@@ -69,13 +69,13 @@ extension SwiftyGPIO {
 
 public protocol SPIInterface {
     // Send data at the requested frequency (from 500Khz to 20 Mhz)
-    func sendData(_ values: [UInt8], frequencyHz: UInt)
+    func sendData(_ values: [UInt8], frequencyHz: UInt) throws
     // Send data at the default frequency
-    func sendData(_ values: [UInt8])
+    func sendData(_ values: [UInt8]) throws
     // Send data and then receive a chunck of data at the requested frequency (from 500Khz to 20 Mhz)
-    func sendDataAndRead(_ values: [UInt8], frequencyHz: UInt) -> [UInt8]
+    func sendDataAndRead(_ values: [UInt8], frequencyHz: UInt) throws -> [UInt8]
     // Send data and then receive a chunck of data at the default frequency
-    func sendDataAndRead(_ values: [UInt8]) -> [UInt8]
+    func sendDataAndRead(_ values: [UInt8]) throws -> [UInt8]
     // Returns true if the SPIInterface is using a real SPI pin, false if performing bit-banging
     var isHardware: Bool { get }
 }
@@ -109,32 +109,32 @@ public final class SysFSSPI: SPIInterface {
 
     public var isHardware =  true
 
-    public func sendData(_ values: [UInt8], frequencyHz: UInt = 500000) {
+    public func sendData(_ values: [UInt8], frequencyHz: UInt = 500000) throws {
         if frequencyHz > 500000 {
             speed = UInt32(frequencyHz)
         }
-        transferData(SPIBASEPATH+spiId, tx:values)
+        try transferData(SPIBASEPATH+spiId, tx:values)
     }
 
-    public func sendData(_ values: [UInt8]) {
-        sendData(values, frequencyHz: 500000)
+    public func sendData(_ values: [UInt8]) throws {
+        try sendData(values, frequencyHz: 500000)
     }
 
-    public func sendDataAndRead(_ values: [UInt8], frequencyHz: UInt = 500000) -> [UInt8] {
+    public func sendDataAndRead(_ values: [UInt8], frequencyHz: UInt = 500000) throws -> [UInt8] {
         if frequencyHz > 500000 {
             speed = UInt32(frequencyHz)
         }
-        let rx = transferData(SPIBASEPATH+spiId, tx:values)
+        let rx = try transferData(SPIBASEPATH+spiId, tx:values)
         return rx
     }
 
-    public func sendDataAndRead(_ values: [UInt8]) -> [UInt8] {
-        return sendDataAndRead(values, frequencyHz: 500000)
+    public func sendDataAndRead(_ values: [UInt8]) throws -> [UInt8] {
+        return try sendDataAndRead(values, frequencyHz: 500000)
     }
 
     /// Write and read bits, will need a few dummy writes if you want only read
     @discardableResult
-    private func transferData(_ path: String, tx: [UInt8]) -> [UInt8] {
+    private func transferData(_ path: String, tx: [UInt8]) throws -> [UInt8] {
         let fd = open(path, O_RDWR)
         guard fd > 0 else {
             fatalError("Couldn't open the SPI device")
@@ -156,8 +156,7 @@ public final class SysFSSPI: SPIInterface {
             }
         }
         if r < 1 {
-            perror("Couldn't send spi message")
-            abort()
+          throw GPIOError.bus("Couldn't send spi message")
         }
         close(fd)
 
@@ -263,60 +262,60 @@ public final class SysFSSPI: SPIInterface {
 public final class VirtualSPI: SPIInterface {
     let mosiGPIO, misoGPIO, clockGPIO, csGPIO: GPIO
 
-    public init(mosiGPIO: GPIO, misoGPIO: GPIO, clockGPIO: GPIO, csGPIO: GPIO) {
+    public init(mosiGPIO: GPIO, misoGPIO: GPIO, clockGPIO: GPIO, csGPIO: GPIO) throws {
         self.mosiGPIO = mosiGPIO
-        self.mosiGPIO.direction = .OUT
-        self.mosiGPIO.value = 0
+      try self.mosiGPIO.set(direction: .OUT)
+      try self.mosiGPIO.set(value: 0)
         self.misoGPIO = misoGPIO
-        self.misoGPIO.direction = .IN
+      try self.misoGPIO.set(direction: .IN)
         self.clockGPIO = clockGPIO
-        self.clockGPIO.direction = .OUT
-        self.clockGPIO.value = 0
+      try self.clockGPIO.set(direction: .OUT)
+      try self.clockGPIO.set(value: 0)
         self.csGPIO = csGPIO
-        self.csGPIO.direction = .OUT
-        self.csGPIO.value = 1
+      try self.csGPIO.set(direction: .OUT)
+      try self.csGPIO.set(value: 1)
     }
 
     public var isHardware =  true
 
-    public func sendData(_ values: [UInt8], frequencyHz: UInt = 500000) {
+    public func sendData(_ values: [UInt8], frequencyHz: UInt = 500000) throws {
         let mmapped = mosiGPIO.isMemoryMapped()
         if mmapped {
-            sendDataGPIOObj(values, frequencyHz: frequencyHz, read: false)
+            try sendDataGPIOObj(values, frequencyHz: frequencyHz, read: false)
         } else {
-            sendDataSysFSGPIO(values, frequencyHz: frequencyHz, read: false)
+            try sendDataSysFSGPIO(values, frequencyHz: frequencyHz, read: false)
         }
     }
-    public func sendData(_ values: [UInt8]) {
-        sendData(values, frequencyHz: 0)
+    public func sendData(_ values: [UInt8]) throws {
+        try sendData(values, frequencyHz: 0)
     }
 
-    public func sendDataAndRead(_ values: [UInt8], frequencyHz: UInt = 500000) -> [UInt8] {
+    public func sendDataAndRead(_ values: [UInt8], frequencyHz: UInt = 500000) throws -> [UInt8] {
         let mmapped = mosiGPIO.isMemoryMapped()
         var rx = [UInt8]()
 
         if mmapped {
-            rx = sendDataGPIOObj(values, frequencyHz: frequencyHz, read: true)
+            rx = try sendDataGPIOObj(values, frequencyHz: frequencyHz, read: true)
         } else {
-            rx = sendDataSysFSGPIO(values, frequencyHz: frequencyHz, read: true)
+            rx = try sendDataSysFSGPIO(values, frequencyHz: frequencyHz, read: true)
         }
 
         return rx
     }
 
-    public func sendDataAndRead(_ values: [UInt8]) -> [UInt8] {
-        return sendDataAndRead(values, frequencyHz: 0)
+    public func sendDataAndRead(_ values: [UInt8]) throws -> [UInt8] {
+        return try sendDataAndRead(values, frequencyHz: 0)
     }
 
     @discardableResult
-    private func sendDataGPIOObj(_ values: [UInt8], frequencyHz: UInt, read: Bool) -> [UInt8] {
+    private func sendDataGPIOObj(_ values: [UInt8], frequencyHz: UInt, read: Bool) throws -> [UInt8] {
         var rx: [UInt8] = [UInt8]()
 
         var bit: Int = 0
         var rbit: UInt8 = 0
 
         //Begin transmission cs=LOW
-        csGPIO.value = 0
+      try csGPIO.set(value: 0)
 
         for value in values {
             rbit = 0
@@ -324,8 +323,8 @@ public final class VirtualSPI: SPIInterface {
             for i in 0...7 {
                 bit = ((value & UInt8(1 << (7-i))) == 0) ? 0 : 1
 
-                mosiGPIO.value = bit
-                clockGPIO.value = 1
+              try mosiGPIO.set(value: bit)
+                  try          clockGPIO.set(value: 1)
                 if frequencyHz > 0 {
                     let amount = UInt32(1_000_000/Double(frequencyHz))
                     // Calling usleep introduces significant delay, don't sleep for small values
@@ -333,9 +332,9 @@ public final class VirtualSPI: SPIInterface {
                         usleep(amount)
                     }
                 }
-                clockGPIO.value = 0
+                              try clockGPIO.set(value: 0)
                 if read {
-                    rbit |= ( UInt8(misoGPIO.value) << (7-UInt8(i)) )
+                    rbit |= ( UInt8(try misoGPIO.value()) << (7-UInt8(i)) )
                 }
             }
             if read {
@@ -344,12 +343,12 @@ public final class VirtualSPI: SPIInterface {
         }
 
         //End transmission cs=HIGH
-        csGPIO.value = 1
+      try csGPIO.set(value: 1)
         return rx
     }
 
     @discardableResult
-    private func sendDataSysFSGPIO(_ values: [UInt8], frequencyHz: UInt, read: Bool) -> [UInt8] {
+    private func sendDataSysFSGPIO(_ values: [UInt8], frequencyHz: UInt, read: Bool) throws -> [UInt8] {
         var rx: [UInt8] = [UInt8]()
 
         let mosipath = GPIOBASEPATH+"gpio"+String(self.mosiGPIO.id)+"/value"
@@ -358,15 +357,14 @@ public final class VirtualSPI: SPIInterface {
         let HIGH = "1"
         let LOW = "0"
         //Begin transmission cs=LOW
-        csGPIO.value = 0
+      try csGPIO.set(value: 0)
 
         let fpmosi: UnsafeMutablePointer<FILE>! = fopen(mosipath, "w")
         let fpmiso: UnsafeMutablePointer<FILE>! = fopen(misopath, "r")
         let fpsclk: UnsafeMutablePointer<FILE>! = fopen(sclkpath, "w")
 
         guard (fpmosi != nil)&&(fpsclk != nil) else {
-            perror("Error while opening gpio")
-            abort()
+          throw GPIOError.bus("Error while opening gpio")
         }
         setvbuf(fpmosi, nil, _IONBF, 0)
         setvbuf(fpmiso, nil, _IONBF, 0)
@@ -380,8 +378,8 @@ public final class VirtualSPI: SPIInterface {
             for i in 0...7 {
                 bit = ((value & UInt8(1 << (7-i))) == 0) ? LOW : HIGH
 
-                writeToFP(fpmosi, value:bit)
-                writeToFP(fpsclk, value:HIGH)
+                try writeToFP(fpmosi, value:bit)
+                try writeToFP(fpsclk, value:HIGH)
                 if frequencyHz > 0 {
                     let amount = UInt32(1_000_000/Double(frequencyHz))
                     // Calling usleep introduces significant delay, don't sleep for small values
@@ -389,9 +387,9 @@ public final class VirtualSPI: SPIInterface {
                         usleep(amount)
                     }
                 }
-                writeToFP(fpsclk, value:LOW)
+                try writeToFP(fpsclk, value:LOW)
                 if read {
-                    rbit |= ( readFromFP(fpmiso) << (7-UInt8(i)) )
+                    rbit |= ( try readFromFP(fpmiso) << (7-UInt8(i)) )
                 }
             }
             if read {
@@ -403,27 +401,25 @@ public final class VirtualSPI: SPIInterface {
         fclose(fpsclk)
 
         //End transmission cs=HIGH
-        csGPIO.value = 1
+      try csGPIO.set(value: 1)
         return rx
     }
 
-    private func writeToFP(_ fp: UnsafeMutablePointer<FILE>, value: String) {
+    private func writeToFP(_ fp: UnsafeMutablePointer<FILE>, value: String) throws {
         let ret = fwrite(value, MemoryLayout<CChar>.stride, 1, fp)
         if ret<1 {
             if ferror(fp) != 0 {
-                perror("Error while writing to file")
-                abort()
+              throw GPIOError.bus("Error while writing to file")
             }
         }
     }
 
-    private func readFromFP(_ fp: UnsafeMutablePointer<FILE>) -> UInt8 {
+    private func readFromFP(_ fp: UnsafeMutablePointer<FILE>) throws -> UInt8 {
         var value: UInt8 = 0
         let ret = fread(&value, MemoryLayout<CChar>.stride, 1, fp)
         if ret<1 {
             if ferror(fp) != 0 {
-                perror("Error while reading from file")
-                abort()
+              throw GPIOError.bus("Error while reading from file")
             }
         }
         return value

@@ -52,87 +52,93 @@ public class GPIO {
         self.id = id
     }
 
-    public var direction: GPIODirection {
-        set(dir) {
-            if !exported {enableIO(id)}
-            performSetting("gpio" + String(id) + "/direction", value: dir.rawValue)
-        }
-        get {
-            if !exported { enableIO(id)}
-            return GPIODirection(rawValue: getStringValue("gpio"+String(id)+"/direction")!)!
-        }
+//    public var direction: GPIODirection {
+//        set(dir) {
+//            if !exported {try enableIO(id)}
+//             try? performSetting("gpio" + String(id) + "/direction", value: dir.rawValue)
+//        }
+//        get {
+//            if !exported {try enableIO(id)}
+//            return try! GPIODirection(rawValue: getStringValue("gpio"+String(id)+"/direction")!)!
+//        }
+//    }
+
+    public func set(direction: GPIODirection) throws {
+                if !exported {try enableIO(id)}
+                 try performSetting("gpio" + String(id) + "/direction", value: direction.rawValue)
+  }
+
+    public func direction() throws -> GPIODirection {
+    if !exported {try enableIO(id)}
+    return try GPIODirection(rawValue: getStringValue("gpio"+String(id)+"/direction")!)!
+  }
+
+    public func set(edge: GPIOEdge) throws {
+        if !exported {try enableIO(id)}
+        try performSetting("gpio"+String(id)+"/edge", value: edge.rawValue)
     }
 
-    public var edge: GPIOEdge {
-        set(dir) {
-            if !exported {enableIO(id)}
-            performSetting("gpio"+String(id)+"/edge", value: dir.rawValue)
-        }
-        get {
-            if !exported {enableIO(id)}
-            return GPIOEdge(rawValue: getStringValue("gpio"+String(id)+"/edge")!)!
-        }
+    public func edge() throws -> GPIOEdge {
+        if !exported {try enableIO(id)}
+        return GPIOEdge(rawValue: try getStringValue("gpio"+String(id)+"/edge")!)!
     }
 
-    public var activeLow: Bool {
-        set(act) {
-            if !exported {enableIO(id)}
-            performSetting("gpio"+String(id)+"/active_low", value: act ? "1":"0")
-        }
-        get {
-            if !exported {enableIO(id)}
-            return getIntValue("gpio"+String(id)+"/active_low")==0
-        }
+    public func set(activeLow: Bool) throws {
+        if !exported {try enableIO(id)}
+        try performSetting("gpio"+String(id)+"/active_low", value: activeLow ? "1":"0")
     }
 
-    public var pull: GPIOPull {
-        set {
-            fatalError("Unsupported parameter.")
-        }
-        get {
-            fatalError("Parameter cannot be read.")
-        }
+    public func activeLow() throws -> Bool {
+        if !exported {try enableIO(id)}
+        return try getIntValue("gpio"+String(id)+"/active_low")==0
     }
 
-    public var value: Int {
-        set(val) {
-            if !exported {enableIO(id)}
-            performSetting("gpio"+String(id)+"/value", value: val)
-        }
-        get {
-            if !exported {enableIO(id)}
-            return getIntValue("gpio"+String(id)+"/value")!
-        }
+    public func set(pull: GPIOPull) throws {
+        fatalError("Unsupported parameter.")
+    }
+
+    public func pull() throws -> GPIOPull {
+        fatalError("Parameter cannot be read.")
+    }
+
+    public func set(value: Int) throws {
+        if !exported {try enableIO(id)}
+        try? performSetting("gpio"+String(id)+"/value", value: value)
+    }
+
+    public func value() throws -> Int {
+        if !exported {try enableIO(id)}
+        return try getIntValue("gpio"+String(id)+"/value")!
     }
 
     public func isMemoryMapped() -> Bool {
         return false
     }
 
-    public func onFalling(_ closure: @escaping (GPIO) -> Void) {
+    public func onFalling(_ closure: @escaping (GPIO) -> Void) throws {
         intFalling = (func: closure, lastCall: nil)
         if intThread == nil {
-            if !exported {enableIO(id)}
+            if !exported {try enableIO(id)}
             intThread = makeInterruptThread()
             listening = true
             intThread?.start()
         }
     }
 
-    public func onRaising(_ closure: @escaping (GPIO) -> Void) {
+    public func onRaising(_ closure: @escaping (GPIO) -> Void) throws {
         intRaising = (func: closure, lastCall: nil)
         if intThread == nil {
-            if !exported {enableIO(id)}
+            if !exported {try enableIO(id)}
             intThread = makeInterruptThread()
             listening = true
             intThread?.start()
         }
     }
 
-    public func onChange(_ closure: @escaping (GPIO) -> Void) {
+    public func onChange(_ closure: @escaping (GPIO) -> Void) throws {
         intChange = (func: closure, lastCall: nil)
         if intThread == nil {
-            if !exported {enableIO(id)}
+            if !exported {try enableIO(id)}
             intThread = makeInterruptThread()
             listening = true
             intThread?.start()
@@ -148,28 +154,28 @@ public class GPIO {
 
 fileprivate extension GPIO {
 
-    func enableIO(_ id: Int) {
-        writeToFile(GPIOBASEPATH+"export", value:String(id))
+    func enableIO(_ id: Int) throws {
+        try writeToFile(GPIOBASEPATH+"export", value:String(id))
         exported = true
     }
 
-    func performSetting(_ filename: String, value: String) {
-        writeToFile(GPIOBASEPATH+filename, value:value)
+    func performSetting(_ filename: String, value: String) throws {
+        try writeToFile(GPIOBASEPATH+filename, value:value)
     }
 
-    func performSetting(_ filename: String, value: Int) {
-        writeToFile(GPIOBASEPATH+filename, value: String(value))
+    func performSetting(_ filename: String, value: Int) throws {
+        try writeToFile(GPIOBASEPATH+filename, value: String(value))
     }
 
-    func getStringValue(_ filename: String) -> String? {
-        return readFromFile(GPIOBASEPATH+filename)
+    func getStringValue(_ filename: String) throws -> String? {
+        return try readFromFile(GPIOBASEPATH+filename)
     }
 
-    func getIntValue(_ filename: String) -> Int? {
-        return readFromFile(GPIOBASEPATH+filename).flatMap(Int.init)
+    func getIntValue(_ filename: String) throws -> Int? {
+        return try readFromFile(GPIOBASEPATH+filename).flatMap(Int.init)
     }
 
-    func writeToFile(_ path: String, value: String) {
+    func writeToFile(_ path: String, value: String) throws {
         let fp = fopen(path, "w")
         guard fp != nil else { return }
         defer { fclose(fp) }
@@ -179,13 +185,12 @@ fileprivate extension GPIO {
         }
         if res < 0 {
             if ferror(fp) != 0 {
-                perror("Error while writing to file")
-                abort()
+              throw GPIOError.bus("Error while writing to file")
             }
         }
     }
 
-    func readFromFile(_ path: String) -> String? {
+    func readFromFile(_ path: String) throws -> String? {
         let MAXLEN = 8
 
         let fp = fopen(path, "r")
@@ -193,13 +198,12 @@ fileprivate extension GPIO {
         defer { fclose(fp) }
         var buf = (CChar(0), CChar(0), CChar(0), CChar(0),
                    CChar(0), CChar(0), CChar(0), CChar(0))
-        return withUnsafeMutableBytes(of: &buf) { buffer in
+        return try withUnsafeMutableBytes(of: &buf) { buffer in
             precondition(buffer.count == MAXLEN)
             let len = fread(buffer.baseAddress, MAXLEN, 1, fp)
             if len < MAXLEN {
                 if ferror(fp) != 0 {
-                    perror("Error while reading from file")
-                    abort()
+                  throw GPIOError.bus("Error while reading from file")
                 }
             }
 
@@ -214,10 +218,10 @@ fileprivate extension GPIO {
         usleep(100000) //100ms sleep: Workaround for poll blocking forever the first time we poll a gpio after the initial export
 
         let thread = Thread {
-
+            do {
             let gpath = GPIOBASEPATH+"gpio"+String(self.id)+"/value"
-            self.direction = .IN
-            self.edge = .BOTH
+            try self.set(direction: .IN)
+            try self.set(edge: .BOTH)
 
             let fp = open(gpath, O_RDWR)
             var buf: [UInt8] = [0, 0, 0]
@@ -244,6 +248,9 @@ fileprivate extension GPIO {
                     }
                     self.interrupt(type: &(self.intChange))
                 }
+            }
+            } catch {
+                print("ERROR!", error)
             }
         }
         return thread
@@ -290,47 +297,44 @@ public final class RaspberryGPIO: GPIO {
         super.init(name:name, id:id)
     }
 
-    public override var value: Int {
-        set(val) {
-            if !inited {initIO()}
-            gpioSet(val)
-        }
-        get {
-            if !inited {initIO()}
-            return gpioGet()
+    public override func set(value: Int) throws {
+                    if !inited {try initIO()}
+                    gpioSet(value)
+    }
+
+    public override func value() throws -> Int {
+                    if !inited {try initIO()}
+                    return gpioGet()
+    }
+
+    public override func set(direction: GPIODirection) throws {
+        if !inited {try initIO()}
+        if direction == .IN {
+            gpioAsInput()
+        } else {
+            gpioAsOutput()
         }
     }
 
-    public override var direction: GPIODirection {
-        set(dir) {
-            if !inited {initIO()}
-            if dir == .IN {
-                gpioAsInput()
-            } else {
-                gpioAsOutput()
-            }
-        }
-        get {
-            if !inited {initIO()}
-            return gpioGetDirection()
-        }
+    public override func direction() throws -> GPIODirection {
+        if !inited {try initIO()}
+        return gpioGetDirection()
     }
 
-    public override var pull: GPIOPull {
-        set(pull) {
-            if !inited {initIO()}
-            setGpioPull(pull)
-        }
-        get{
-            fatalError("Parameter cannot be read.")
-        }
+    public override func set(pull: GPIOPull) throws {
+        if !inited {try initIO()}
+        setGpioPull(pull)
+    }
+
+    public override func pull() -> GPIOPull {
+        fatalError("Parameter cannot be read.")
     }
 
     public override func isMemoryMapped() -> Bool {
         return true
     }
 
-    private func initIO() {
+    private func initIO() throws {
         var mem_fd: Int32 = 0
 
         //Try to open one of the mem devices
@@ -356,8 +360,7 @@ public final class RaspberryGPIO: GPIO {
         close(mem_fd)
 
         if (Int(bitPattern: gpio_map) == -1) {    //MAP_FAILED not available, but its value is (void*)-1
-            perror("mmap error")
-            abort()
+          throw GPIOError.bus("mmap error")
         }
         gpioBasePointer = gpio_map.assumingMemoryBound(to: UInt32.self)
 

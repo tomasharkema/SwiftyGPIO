@@ -69,11 +69,11 @@ extension SwiftyGPIO {
 // MARK: PWM
 
 public protocol PWMOutput {
-    func initPWM()
+    func initPWM() throws
     func startPWM(period ns: Int, duty percent: Float)
     func stopPWM()
 
-    func initPWMPattern(bytes count: Int, at frequency: Int, with resetDelay: Int, dutyzero: Int, dutyone: Int)
+    func initPWMPattern(bytes count: Int, at frequency: Int, with resetDelay: Int, dutyzero: Int, dutyone: Int) throws
     func sendDataWithPattern(values: [UInt8])
     func waitOnSendData()
     func cleanupPattern()
@@ -120,7 +120,7 @@ public class RaspberryPWM: PWMOutput {
     }
 
     /// Init PWM on this pin, set alternative function
-    public func initPWM() {
+    public func initPWM() throws {
         var mem_fd: Int32 = 0
 
         //The only mem device that support PWM is /dev/mem
@@ -130,9 +130,9 @@ public class RaspberryPWM: PWMOutput {
             fatalError("Can't open /dev/mem , use sudo!")
         }
 
-        gpioBasePointer = memmap(from: mem_fd, at: GPIO_BASE)
-        pwmBasePointer = memmap(from: mem_fd, at: PWM_BASE)
-        clockBasePointer = memmap(from: mem_fd, at: CLOCK_BASE)
+        gpioBasePointer = try memmap(from: mem_fd, at: GPIO_BASE)
+        pwmBasePointer = try memmap(from: mem_fd, at: PWM_BASE)
+        clockBasePointer = try memmap(from: mem_fd, at: CLOCK_BASE)
 
         let DMAOffsets: [UInt] = [0x00007000, 0x00007100, 0x00007200, 0x00007300,
                                  0x00007400, 0x00007500, 0x00007600, 0x00007700,
@@ -148,7 +148,7 @@ public class RaspberryPWM: PWMOutput {
         let pageOffset = Int( dma_addr % UInt(PAGE_SIZE) )
         dma_addr -= UInt(pageOffset)
 
-        let dma_map = UnsafeMutableRawPointer(memmap(from: mem_fd, at: dma_addr))
+        let dma_map = UnsafeMutableRawPointer(try memmap(from: mem_fd, at: dma_addr))
         dmaBasePointer = (dma_map + pageOffset).assumingMemoryBound(to: UInt32.self)
 
         close(mem_fd)
@@ -192,7 +192,7 @@ public class RaspberryPWM: PWMOutput {
     }
 
     /// Maps a block of memory and returns the pointer
-    internal func memmap(from mem_fd: Int32, at offset: UInt) -> UnsafeMutablePointer<UInt32> {
+    internal func memmap(from mem_fd: Int32, at offset: UInt) throws -> UnsafeMutablePointer<UInt32> {
         let m = mmap(
             nil,                 //Any adddress in our space will do
             PAGE_SIZE,          //Map length
@@ -203,8 +203,7 @@ public class RaspberryPWM: PWMOutput {
             )!
 
         if (Int(bitPattern: m) == -1) {    //MAP_FAILED not available, but its value is (void*)-1
-            perror("mmap error")
-            abort()
+          throw GPIOError.bus("mmap error")
         }
         let pointer = m.assumingMemoryBound(to: UInt32.self)
 
@@ -322,7 +321,7 @@ extension RaspberryPWM {
     /// - Parameter dutyzero: duty cycle of the pattern for zero
     /// - Parameter dutyone: duty cycle of the pattern for one
     ///
-    public func initPWMPattern(bytes count: Int, at frequency: Int, with resetDelay: Int, dutyzero: Int, dutyone: Int) {
+    public func initPWMPattern(bytes count: Int, at frequency: Int, with resetDelay: Int, dutyzero: Int, dutyone: Int) throws {
 
         (zeroPattern, onePattern, symbolBits) = getRepresentation(zero: dutyzero, one: dutyone)
         guard symbolBits > 0 else {fatalError("Couldn't generate a valid pattern for the provided duty cycle values, try with more spaced values.")}
@@ -337,7 +336,7 @@ extension RaspberryPWM {
 
         // Round up to page size multiple
         let mboxsize = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)
-        mailbox = MailBox(handle: -1, size: mboxsize, isRaspi2: BCM2708_PERI_BASE != 0x20000000)
+        mailbox = try MailBox(handle: -1, size: mboxsize, isRaspi2: BCM2708_PERI_BASE != 0x20000000)
 
         guard let mailbox = mailbox else {fatalError("Could allocate mailbox.")}
 

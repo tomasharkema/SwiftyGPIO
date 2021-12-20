@@ -52,13 +52,13 @@ extension SwiftyGPIO {
 
 // MARK: UART
 public protocol UARTInterface {
-    func configureInterface(speed: UARTSpeed, bitsPerChar: CharSize, stopBits: StopBits, parity: ParityType)
+    func configureInterface(speed: UARTSpeed, bitsPerChar: CharSize, stopBits: StopBits, parity: ParityType) throws
     func hasAvailableData() throws -> Bool
-    func readString() -> String
-    func readLine() -> String
-    func readData() -> [CChar]
-    func writeString(_ value: String)
-    func writeData(_ values: [CChar])
+    func readString() throws -> String
+    func readLine() throws -> String
+    func readData() throws -> [CChar]
+    func writeString(_ value: String) throws
+    func writeData(_ values: [CChar]) throws
 }
 
 public enum ParityType {
@@ -192,7 +192,7 @@ public final class SysFSUART: UARTInterface {
         self.init([uartId])
     }
 
-    public func configureInterface(speed: UARTSpeed, bitsPerChar: CharSize, stopBits: StopBits, parity: ParityType) {
+    public func configureInterface(speed: UARTSpeed, bitsPerChar: CharSize, stopBits: StopBits, parity: ParityType) throws {
         speed.configure(&tty)
 
         bitsPerChar.configure(&tty)
@@ -209,7 +209,7 @@ public final class SysFSUART: UARTInterface {
         parity.configure(&tty)
         stopBits.configure(&tty)
 
-        applyConfiguration()
+        try applyConfiguration()
     }
     
     public func hasAvailableData() throws -> Bool {
@@ -220,16 +220,15 @@ public final class SysFSUART: UARTInterface {
         return bytesToRead > 0
     }
 
-    public func readLine() -> String {
+    public func readLine() throws -> String {
         var buf = [CChar](repeating:0, count: 4097) //4096 chars at max in canonical mode
-        return buf.withUnsafeMutableBufferPointer  { ptr -> String in
+        return try buf.withUnsafeMutableBufferPointer  { ptr -> String in
             let newLineChar = CChar(UInt8(ascii: "\n"))
             var pos = 0
             repeat {
                 let n = read(fd, ptr.baseAddress! + pos, MemoryLayout<CChar>.stride)
                 if n<0 {
-                    perror("Error while reading from UART")
-                    abort()
+                  throw GPIOError.bus("Error while reading from UART")
                 }
                 pos += 1
             } while (ptr[pos-1] != newLineChar) && (pos < ptr.count-1)
@@ -238,19 +237,18 @@ public final class SysFSUART: UARTInterface {
         }
     }
 
-    public func readString() -> String {
-        var buf = readData()
+    public func readString() throws -> String {
+        var buf = try readData()
         buf.append(0) //Add terminator to convert cString correctly
         return String(cString: &buf)
     }
 
-    public func readData() -> [CChar] {
+    public func readData() throws -> [CChar] {
         var buf = [CChar](repeating:0, count: 4096) //4096 chars at max in canonical mode
 
         let n = read(fd, &buf, buf.count * MemoryLayout<CChar>.stride)
         if n<0 {
-            perror("Error while reading from UART")
-            abort()
+          throw GPIOError.bus("Error while reading from UART")
         }
         return Array(buf[0..<n])
     }
@@ -268,10 +266,9 @@ public final class SysFSUART: UARTInterface {
         tcdrain(fd)
     }
 
-    private func applyConfiguration() {
+    private func applyConfiguration() throws {
         if tcsetattr (fd, TCSANOW, &tty) != 0 {
-            perror("Couldn't set terminal attributes")
-            abort()
+          throw GPIOError.bus("Couldn't set terminal attributes")
         }
     }
 

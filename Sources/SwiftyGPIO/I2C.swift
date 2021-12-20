@@ -69,19 +69,19 @@ extension SwiftyGPIO {
 // MARK: I2C
 
 public protocol I2CInterface {
-    func isReachable(_ address: Int) -> Bool
-    func setPEC(_ address: Int, enabled: Bool)
-    func readByte(_ address: Int) -> UInt8
-    func readByte(_ address: Int, command: UInt8) -> UInt8
-    func readWord(_ address: Int, command: UInt8) -> UInt16
-    func readData(_ address: Int, command: UInt8) -> [UInt8]
-    func readI2CData(_ address: Int, command: UInt8) -> [UInt8]
-    func writeQuick(_ address: Int)
-    func writeByte(_ address: Int, value: UInt8)
-    func writeByte(_ address: Int, command: UInt8, value: UInt8)
-    func writeWord(_ address: Int, command: UInt8, value: UInt16)
-    func writeData(_ address: Int, command: UInt8, values: [UInt8])
-    func writeI2CData(_ address: Int, command: UInt8, values: [UInt8])
+    func isReachable(_ address: Int) throws -> Bool
+    func setPEC(_ address: Int, enabled: Bool) throws
+    func readByte(_ address: Int) throws -> UInt8
+    func readByte(_ address: Int, command: UInt8) throws -> UInt8
+    func readWord(_ address: Int, command: UInt8) throws -> UInt16
+    func readData(_ address: Int, command: UInt8) throws -> [UInt8]
+    func readI2CData(_ address: Int, command: UInt8) throws -> [UInt8]
+    func writeQuick(_ address: Int) throws
+    func writeByte(_ address: Int, value: UInt8) throws
+    func writeByte(_ address: Int, command: UInt8, value: UInt8) throws
+    func writeWord(_ address: Int, command: UInt8, value: UInt16) throws
+    func writeData(_ address: Int, command: UInt8, values: [UInt8]) throws
+    func writeI2CData(_ address: Int, command: UInt8, values: [UInt8]) throws
     // One-shot rd/wr not provided
 }
 
@@ -102,14 +102,13 @@ public final class SysFSI2C: I2CInterface {
         }
     }
 
-    public func readByte(_ address: Int) -> UInt8 {
-        setSlaveAddress(address)
+    public func readByte(_ address: Int) throws -> UInt8 {
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_read_byte()
 
         if r < 0 {
-            perror("I2C read failed")
-            abort()
+          throw GPIOError.bus("I2C read failed")
         }
       #if swift(>=4.0)
         return UInt8(truncatingIfNeeded: r)
@@ -118,14 +117,13 @@ public final class SysFSI2C: I2CInterface {
       #endif
     }
 
-    public func readByte(_ address: Int, command: UInt8) -> UInt8 {
-        setSlaveAddress(address)
+    public func readByte(_ address: Int, command: UInt8) throws -> UInt8 {
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_read_byte_data(command: command)
 
         if r < 0 {
-            perror("I2C read failed")
-            abort()
+          throw GPIOError.bus("I2C read failed")
         }
       #if swift(>=4.0)
         return UInt8(truncatingIfNeeded: r)
@@ -134,14 +132,13 @@ public final class SysFSI2C: I2CInterface {
       #endif
     }
 
-    public func readWord(_ address: Int, command: UInt8) -> UInt16 {
-        setSlaveAddress(address)
+    public func readWord(_ address: Int, command: UInt8) throws -> UInt16 {
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_read_word_data(command: command)
 
         if r < 0 {
-            perror("I2C read failed")
-            abort()
+          throw GPIOError.bus("I2C read failed")
         }
       #if swift(>=4.0)
         return UInt16(truncatingIfNeeded: r)
@@ -150,102 +147,94 @@ public final class SysFSI2C: I2CInterface {
       #endif
     }
 
-    public func readData(_ address: Int, command: UInt8) -> [UInt8] {
+    public func readData(_ address: Int, command: UInt8) throws -> [UInt8] {
         var buf: [UInt8] = [UInt8](repeating:0, count: 32)
 
-        setSlaveAddress(address)
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_read_block_data(command: command, values: &buf)
 
         if r < 0 {
-            perror("I2C read failed")
-            abort()
+          throw GPIOError.bus("I2C read failed")
         }
         return buf
     }
 
-    public func readI2CData(_ address: Int, command: UInt8) -> [UInt8] {
+    public func readI2CData(_ address: Int, command: UInt8) throws -> [UInt8] {
         var buf: [UInt8] = [UInt8](repeating:0, count: 32)
 
-        setSlaveAddress(address)
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_read_i2c_block_data(command: command, values: &buf)
 
         if r < 0 {
-            perror("I2C read failed")
-            abort()
+          throw GPIOError.bus("I2C read failed")
         }
         return buf
     }
  
-    public func writeQuick(_ address: Int) {
-        setSlaveAddress(address)
+    public func writeQuick(_ address: Int) throws {
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_write_quick(value: I2C_SMBUS_WRITE)
 
         if r < 0 {
-            perror("I2C write failed")
-            abort()
+          throw GPIOError.bus("I2C write failed")
         }
     }
 
-    public func writeByte(_ address: Int, value: UInt8) {
-        setSlaveAddress(address)
+    public func writeByte(_ address: Int, value: UInt8) throws{
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_write_byte(value: value)
 
         if r < 0 {
-            perror("I2C write failed")
-            abort()
+          throw GPIOError.bus("I2C write failed")
         }
     }
 
-    public func writeByte(_ address: Int, command: UInt8, value: UInt8) {
-        setSlaveAddress(address)
+    public func writeByte(_ address: Int, command: UInt8, value: UInt8) throws {
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_write_byte_data(command: command, value: value)
 
         if r < 0 {
-            perror("I2C write failed")
-            abort()
+          throw GPIOError.bus("I2C write failed")
         }
     }
 
-    public func writeWord(_ address: Int, command: UInt8, value: UInt16) {
-        setSlaveAddress(address)
+    public func writeWord(_ address: Int, command: UInt8, value: UInt16) throws {
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_write_word_data(command: command, value: value)
 
         if r < 0 {
-            perror("I2C write failed")
-            abort()
+          throw GPIOError.bus("I2C write failed")
         }
     }
 
-    public func writeData(_ address: Int, command: UInt8, values: [UInt8]) {
-        setSlaveAddress(address)
+    public func writeData(_ address: Int, command: UInt8, values: [UInt8]) throws {
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_write_block_data(command: command, values: values)
 
         if r < 0 {
-            perror("I2C write failed")
-            abort()
+          throw GPIOError.bus("I2C write failed")
         }
     }
 
-    public func writeI2CData(_ address: Int, command: UInt8, values: [UInt8]) {
-        setSlaveAddress(address)
+    public func writeI2CData(_ address: Int, command: UInt8, values: [UInt8]) throws {
+        try setSlaveAddress(address)
 
         let r =  i2c_smbus_write_i2c_block_data(command: command, values: values)
 
         if r < 0 {
-            perror("I2C write failed")
-            abort()
+          throw GPIOError.bus("I2C write failed")
         }
     }
  
-    public func isReachable(_ address: Int) -> Bool {
-        setSlaveAddress(address)
+    public func isReachable(_ address: Int) throws -> Bool {
+        try setSlaveAddress(address)
 
         var r: Int32 =  -1
         
@@ -270,18 +259,17 @@ public final class SysFSI2C: I2CInterface {
         return true
     }
 
-    public func setPEC(_ address: Int, enabled: Bool) {
-        setSlaveAddress(address)
+    public func setPEC(_ address: Int, enabled: Bool) throws {
+        try setSlaveAddress(address)
 
         let r =  ioctl(fd, I2C_PEC, enabled ? 1 : 0)
 
         if r != 0 {
-            perror("I2C communication failed")
-            abort()
+          throw GPIOError.bus("I2C communication failed")
         }
     }
 
-    private func setSlaveAddress(_ to: Int) {
+    private func setSlaveAddress(_ to: Int) throws {
 
         if fd == -1 {
             openI2C()
@@ -291,8 +279,7 @@ public final class SysFSI2C: I2CInterface {
 
         let r = ioctl(fd, I2C_SLAVE_FORCE, CInt(to))
         if r != 0 {
-            perror("I2C communication failed")
-            abort()
+          throw GPIOError.bus("I2C communication failed")
         }
 
         currentSlave = to
